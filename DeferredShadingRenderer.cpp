@@ -2461,6 +2461,10 @@ void FDeferredShadingSceneRenderer::Render(FRHICommandListImmediate& RHICmdList)
 
 				SCOPED_GPU_MASK(RHICmdList, View.GPUMask);
 				RDG_EVENT_SCOPE_CONDITIONAL(GraphBuilder, Views.Num() > 1, "View%d", ViewIndex);
+
+				//PostProcessingInputs.SceneColor = GSystemTextures.GetBlackDummy(GraphBuilder);
+				//AddMyCustomPostProcess(GraphBuilder, View, PostProcessingInputs.SceneColor, RHICmdList, PassType::COMPUTE_PASS);
+
 				AddDebugPostProcessingPasses(GraphBuilder, View, PostProcessingInputs);
 			}
 		}
@@ -2471,7 +2475,8 @@ void FDeferredShadingSceneRenderer::Render(FRHICommandListImmediate& RHICmdList)
 				FViewInfo& View = Views[ViewIndex];
 
 		// TODO: 后处理前增加一个gaussian
-				AddMyCustomPostProcess(GraphBuilder, View,PostProcessingInputs.SceneColor,RHICmdList, PassType::SCREEN_PASS);
+				AddMyCustomPostProcess(GraphBuilder, View,PostProcessingInputs.SceneColor,RHICmdList, PassType::COMPUTE_PASS);
+				//PostProcessingInputs.SceneColor = GSystemTextures.GetBlackDummy(GraphBuilder);
 
 
 				SCOPED_GPU_MASK(RHICmdList, View.GPUMask);

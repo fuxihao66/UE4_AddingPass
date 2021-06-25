@@ -8,9 +8,10 @@ enum PassType{
 	VS_PS = 1,
 	COMPUTE_PASS = 2
 };
+
+
 void AddMyCustomPostProcess(FRDGBuilder& GraphBuilder,
 	const FViewInfo& View,
-	const FMotionBlurViewports& Viewports,
-	FRDGTextureRef ColorTexture,
+	FRDGTextureRef& ColorTexture,
 	FRHICommandListImmediate& RHICmdList,
-    PassType passType);
+	PassType passType);

@@ -1,101 +1,150 @@
 // FComputeShaderUtils::AddPass 是GraphBuilder.AddPass的compute shader的封装
 
 #include "MyPostProcess.h"
+#include "SceneTextureParameters.h"
+#include "PixelShaderUtils.h"
+// TODO: 如何拷贝texture？？？
+	//RHICmdList.CopyToResolveTarget(ColorTexture, copiedTexture, FResolveParams());  FRHITexture？？
+
 
 // TODO: 绑定SRV需要GraphBuilder.CreateSRV吗
 //  如果资源声明为SHADER_PARAMETER_TEXTURE(Texture2D, SSProfilesTexture) 不需要 
 // 如果资源声明为 SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer, NodeData) 则需要
 
-class FMyPostProcessShader : public FGlobalShader
-{
+// TODO:
+// UE中texture可以直接使用[]来索引（只需要绑定为texture  不需要是UAV）
+// UE中的texture如果绑定的是UAV如果不写入，会有编译错误（需要声明为
+		// SHADER_PARAMETER_RDG_TEXTURE(Texture2D, gSceneColor)
+
+
+
+
+
+//
+//class FMyPostProcessShader : public FGlobalShader
+//{
+//public:
+//	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+//	{
+//		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+//	}
+//
+//	FMyPostProcessShader() = default;
+//	FMyPostProcessShader(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
+//		: FGlobalShader(Initializer)
+//	{}
+//};
+
+// ----------------------------- pixel shader 定义---------------------------------------------------
+//
+//BEGIN_SHADER_PARAMETER_STRUCT(FMyPostProcessParameters, )
+//	// SHADER_PARAMETER(uint32, ScatterPass)
+//	// SHADER_PARAMETER_RDG_TEXTURE(Texture2D, VelocityTileTexture)
+//    SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, InputInfo)
+//	//SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+//	SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gSceneColor)
+//	RENDER_TARGET_BINDING_SLOTS() // 添加了render target slot
+//END_SHADER_PARAMETER_STRUCT()
+
+
+//class FQuadVS : public FMyPostProcessShader
+//{
+//public:
+//	DECLARE_GLOBAL_SHADER(FQuadVS);
+//	SHADER_USE_PARAMETER_STRUCT(FQuadVS, FMyPostProcessShader);
+//	using FParameters = FMyPostProcessParameters;
+//};
+//
+//IMPLEMENT_GLOBAL_SHADER(FQuadVS, "/Engine/Private/PostBlur.usf", "MyVS", SF_Vertex);
+//
+//class FMyPostProcessPS : public FMyPostProcessShader
+//{
+//public:
+//	DECLARE_GLOBAL_SHADER(FMyPostProcessPS);
+//	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessPS, FMyPostProcessShader);
+//	using FParameters = FMyPostProcessParameters;
+//};
+//
+//IMPLEMENT_GLOBAL_SHADER(FMyPostProcessPS, "/Engine/Private/PostBlur.usf", "MyPS", SF_Pixel);
+
+// -------------------------------screen pass -----------------------------------------------
+//
+//class FMyPostProcessScreenPassPS : public FMyPostProcessShader
+//{
+//public:
+//	DECLARE_GLOBAL_SHADER(FMyPostProcessScreenPassPS);
+//	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessScreenPassPS, FMyPostProcessShader);
+//	using FParameters = FMyPostProcessParameters;
+//};
+//
+//IMPLEMENT_GLOBAL_SHADER(FMyPostProcessScreenPassPS, "/Engine/Private/PostBlurScreenPass.usf", "MyPS", SF_Pixel);
+
+// ----------------------------- compute shader 定义---------------------------------------------------
+//
+//class FMyPostProcessCS : public FGlobalShader
+//{
+//public:
+//	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters) {
+//		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+//	}
+//
+//	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment) {
+//		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+//	}
+//	DECLARE_GLOBAL_SHADER(FMyPostProcessCS);
+//	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessCS, FGlobalShader);
+//
+//	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+//		SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, InputInfo)
+//		//SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+//		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gSceneColor)
+//		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gFilterResult)
+//
+//	END_SHADER_PARAMETER_STRUCT()
+//};
+//IMPLEMENT_GLOBAL_SHADER(FMyPostProcessCS, "/Engine/Private/PostBlurComputeShader.usf", "MyMain", SF_Compute);
+//
+
+
+class FMyPostProcessCS : public FGlobalShader {
 public:
-	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
-	{
+	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters) {
 		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
 	}
 
-	FMyPostProcessShader() = default;
-	FMyPostProcessShader(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
-		: FGlobalShader(Initializer)
-	{}
-};
-
-// ----------------------------- pixel shader 定义---------------------------------------------------
-
-BEGIN_SHADER_PARAMETER_STRUCT(FMyPostProcessParameters, )
-	// SHADER_PARAMETER(uint32, ScatterPass)
-	// SHADER_PARAMETER_RDG_TEXTURE(Texture2D, VelocityTileTexture)
-    SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, InputInfo)
-	SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gSceneColor)
-	RENDER_TARGET_BINDING_SLOTS() // 添加了render target slot
-END_SHADER_PARAMETER_STRUCT()
-
-
-class FQuadVS : public FMyPostProcessShader
-{
-public:
-	DECLARE_GLOBAL_SHADER(FQuadVS);
-	SHADER_USE_PARAMETER_STRUCT(FQuadVS, FMyPostProcessShader);
-	using FParameters = FMyPostProcessParameters;
-};
-
-IMPLEMENT_GLOBAL_SHADER(FQuadVS, "/Engine/Private/PostBlur.usf", "MyVS", SF_Vertex);
-
-class FMyPostProcessPS : public FMyPostProcessShader
-{
-public:
-	DECLARE_GLOBAL_SHADER(FMyPostProcessPS);
-	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessPS, FMyPostProcessShader);
-	using FParameters = FMyPostProcessParameters;
-};
-
-IMPLEMENT_GLOBAL_SHADER(FMyPostProcessPS, "/Engine/Private/PostBlur.usf", "MyPS", SF_Pixel);
-
-// -------------------------------screen pass -----------------------------------------------
-
-class FMyPostProcessScreenPassPS : public FMyPostProcessShader
-{
-public:
-	DECLARE_GLOBAL_SHADER(FMyPostProcessPS);
-	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessPS, FMyPostProcessShader);
-	using FParameters = FMyPostProcessParameters;
-};
-
-IMPLEMENT_GLOBAL_SHADER(FMyPostProcessScreenPassPS, "/Engine/Private/PostBlurScreenPass.usf", "MyPS", SF_Pixel);
-
-// ----------------------------- compute shader 定义---------------------------------------------------
-
-class FMyPostProcessCS : public FMyPostProcessShader
-{
-public:
-
-
-
-	// static const uint32 ThreadGroupSize = 16;
+	static void ModifyCompilationEnvironment(const FGlobalShaderPermutationParameters& Parameters, FShaderCompilerEnvironment& OutEnvironment) {
+		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+	}
 
 	DECLARE_GLOBAL_SHADER(FMyPostProcessCS);
-	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessCS, FMyPostProcessShader);
+	SHADER_USE_PARAMETER_STRUCT(FMyPostProcessCS, FGlobalShader);
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		// SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
-		// SHADER_PARAMETER_STRUCT(FMotionBlurParameters, MotionBlur)
-		// SHADER_PARAMETER_RDG_TEXTURE(Texture2D, VelocityTexture)
-		// SHADER_PARAMETER_RDG_TEXTURE(Texture2D, DepthTexture)
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gSceneColor)
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float4>, gFilterResult)
-        SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, InputInfo)
-        // SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+		// Input images
+		/*SHADER_PARAMETER_RDG_TEXTURE(Texture2D, SceneDepthTexture)
+		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, SceneVelocityTexture)*/
 
-	END_SHADER_PARAMETER_STRUCT()
+		SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+		SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, InputInfo)
+
+		// Output images
+		/*SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, DilatedVelocityOutput)
+		SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, ClosestDepthOutput)*/
+		//SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, gSceneColor)
+		SHADER_PARAMETER_RDG_TEXTURE(Texture2D, gSceneColor)
+		SHADER_PARAMETER_RDG_TEXTURE_UAV(Texture2D, gFilterResult)
+
+		END_SHADER_PARAMETER_STRUCT()
+
 };
-IMPLEMENT_GLOBAL_SHADER(FMyPostProcessCS, "/Engine/Private/PostBlurComputeShader.usf", "MyMain", SF_Compute);
 
+IMPLEMENT_GLOBAL_SHADER(FMyPostProcessCS, "/Engine/Private/PostBlurComputeShader.usf", "MyMain", SF_Compute);
 
 
 // 添加pass
 void AddMyCustomPostProcess(FRDGBuilder& GraphBuilder,
 	const FViewInfo& View,
-	FRDGTextureRef ColorTexture,
+	FRDGTextureRef& ColorTexture,
 	FRHICommandListImmediate& RHICmdList,
     PassType passType)
 {
@@ -113,10 +162,9 @@ void AddMyCustomPostProcess(FRDGBuilder& GraphBuilder,
         /* bInForceSeparateTargetAndShaderResource = */ false);
 
     auto copiedTexture  = GraphBuilder.CreateTexture(Desc, TEXT("copied screen texture"));
-	RHICmdList.CopyToResolveTarget(ColorTexture, copiedTexture, FResolveRect(0, 0, FamilySize.X, FamilySize.Y));
 
 
-	switch (passType){
+	//switch (passType){
 		// case PassType::VS_PS:
 		// 	// FRDGTextureRef VelocityTileDepthTexture =
 		// 	// 	GraphBuilder.CreateTexture(
@@ -196,50 +244,51 @@ void AddMyCustomPostProcess(FRDGBuilder& GraphBuilder,
 		// 		RHICmdList.DrawIndexedPrimitive(GScatterQuadIndexBuffer.IndexBufferRHI, 0, 0, 32, 0, 2 * QuadsPerInstance, FMath::DivideAndRoundUp(VelocityTileCount.X * VelocityTileCount.Y, QuadsPerInstance));
 		// 	});
 		// 	break;
-		case PassType::SCREEN_PASS:
-			FMyPostProcessScreenPassPS::FParameters* PassParameters = GraphBuilder.AllocParameters<FMyPostProcessScreenPassPS::FParameters>();
-			PassParameters->gSceneColor = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(copiedTexture));
-			PassParameters->RenderTargets[0] = FRenderTargetBinding(ColorTexture, View.GetOverwriteLoadAction());
-			PassParameters->InputInfo = GetScreenPassTextureViewportParameters(FScreenPassTextureViewport(ColorTexture->Desc.Extent, View.ViewRect));
+	//if (passType == PassType::SCREEN_PASS) {
+	//	FMyPostProcessScreenPassPS::FParameters* PassParameters = GraphBuilder.AllocParameters<FMyPostProcessScreenPassPS::FParameters>();
+	//	PassParameters->gSceneColor = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(ColorTexture));
+	//	PassParameters->RenderTargets[0] = FRenderTargetBinding(copiedTexture, View.GetOverwriteLoadAction());
+	//	PassParameters->InputInfo = GetScreenPassTextureViewportParameters(FScreenPassTextureViewport(copiedTexture->Desc.Extent, View.ViewRect));
+	//	//PassParameters->View = View.ViewUniformBuffer;
 
-			TShaderMapRef<FMyPostProcessScreenPassPS> PixelShader(View.ShaderMap, PermutationVector);
+	//	TShaderMapRef<FMyPostProcessScreenPassPS> PixelShader(View.ShaderMap);
 
-			AddDrawScreenPass(
-				GraphBuilder,
-				RDG_EVENT_NAME("My postprocess screen pass"),
-				View,
-				FScreenPassTextureViewport(ColorTexture),
-				FScreenPassTextureViewport(ColorTexture),
-				*PixelShader,
-				PassParameters,
-				EScreenPassDrawFlags::AllowHMDHiddenAreaMask);
+	//	AddDrawScreenPass(
+	//		GraphBuilder,
+	//		RDG_EVENT_NAME("My postprocess screen pass"),
+	//		View,
+	//		FScreenPassTextureViewport(ColorTexture),
+	//		FScreenPassTextureViewport(ColorTexture),
+	//		*PixelShader,
+	//		PassParameters,
+	//		EScreenPassDrawFlags::AllowHMDHiddenAreaMask);
+	//}
+	if (passType == PassType::COMPUTE_PASS) {
+		FMyPostProcessCS::FParameters* CSPassParameters = GraphBuilder.AllocParameters<FMyPostProcessCS::FParameters>();
 
-			break;
-		case PassType::COMPUTE_PASS:
+		CSPassParameters->gSceneColor = ColorTexture;
+		CSPassParameters->gFilterResult = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(copiedTexture));
 
-			FMyPostProcessCS::FParameters* PassParameters = GraphBuilder.AllocParameters<FMyPostProcessCS::FParameters>();
+		//CSPassParameters->View = View.ViewUniformBuffer;
+		CSPassParameters->InputInfo = GetScreenPassTextureViewportParameters(FScreenPassTextureViewport(ColorTexture->Desc.Extent, View.ViewRect));
 
-			PassParameters->gSceneColor = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(copiedTexture));
-			PassParameters->gFilterResult = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(ColorTexture));
+		// PassParameters->PrevClosestDepthOutput = GraphBuilder.CreateUAV(PrevClosestDepthTexture);
 
-			PassParameters->View = View.ViewUniformBuffer;
-			PassParameters->InputInfo = GetScreenPassTextureViewportParameters(FScreenPassTextureViewport(ColorTexture->Desc.Extent, View.ViewRect));
+		TShaderMapRef<FMyPostProcessCS> ComputeShader(View.ShaderMap);
 
-			// PassParameters->PrevClosestDepthOutput = GraphBuilder.CreateUAV(PrevClosestDepthTexture);
-
-			TShaderMapRef<FMyPostProcessCS> ComputeShader(View.ShaderMap);
-
-			FComputeShaderUtils::AddPass(
-				GraphBuilder,
-				RDG_EVENT_NAME("Filter"),
-				*ComputeShader,
-				PassParameters,
-				FComputeShaderUtils::GetGroupCount(View.ViewRect.Size(), 8));
+		FComputeShaderUtils::AddPass(
+			GraphBuilder,
+			RDG_EVENT_NAME("Filter"),
+			*ComputeShader,
+			CSPassParameters,
+			FComputeShaderUtils::GetGroupCount(View.ViewRect.Size(), 8));
 	}
+
+			
 	
-
-
-
+	auto tempPtr = ColorTexture;
+	ColorTexture = copiedTexture;
+	copiedTexture = tempPtr;
 
 }
 
