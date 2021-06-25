@@ -1,0 +1,130 @@
+RWTexture2D<float4> gSceneColor;
+// RWTexture2D<float4> gFilterResult;
+
+#define KERNEL_SIZE 3
+
+
+// cbuffer CB
+// {
+//     uint2 texDim;
+// };
+
+
+SCREEN_PASS_TEXTURE_VIEWPORT(InputInfo)
+
+bool outside(int2 pixelPos, uint2 dim){
+	BRANCH
+    if (pixelPos.x < 0 || pixelPos.y < 0){
+        return true;
+    }
+    
+	BRANCH
+    if (pixelPos.x >= dim.x || pixelPos.y >= dim.y){
+        return true;
+    }
+
+    return false;
+}
+
+
+
+
+void MyVS(
+	uint VId : SV_VertexID,
+	uint IId : SV_InstanceID,
+	out nointerpolation float4 OutColor : TEXCOORD0,
+	out float4 OutPosition : SV_POSITION)
+{
+	OutPosition = float4(0, 0, 0, 1);
+
+	// needs to be the same on C++ side (faster on NVIDIA and AMD)
+	uint QuadsPerInstance = 8;
+
+	// remap the indices to get vertexid to VId and quadid into IId
+	IId = IId * QuadsPerInstance + (VId / 4);
+	VId = VId % 4;
+
+	// triangle A: 0:left top, 1:right top, 2: left bottom
+	// triangle B: 3:right bottom, 4:left bottom, 5: right top
+	float2 CornerOffset = float2(VId % 2, VId / 2) * 2 - 1;
+
+	uint2 PixelPos = uint2(IId % VelocityTile_ViewportMax.x, IId / VelocityTile_ViewportMax.x);
+
+	BRANCH
+	if (PixelPos.y >= VelocityTile_ViewportMax.y)
+	{
+		OutColor = 0;
+		return;
+	}
+
+	float2 SvPosition = PixelPos + 0.5;
+
+	float4 MinMaxVelocity = VelocityTileTexture[PixelPos];
+	OutColor = MinMaxVelocity;
+
+	float4 MinMaxVelocityPixels = MinMaxVelocity * MotionBlur_VelocityScaleForTiles;
+	float2 VelocityPixels = MinMaxVelocityPixels.zw;
+
+	// Is the velocity small enough not to cover adjacent tiles?
+	BRANCH
+	if (dot(VelocityPixels, VelocityPixels) * 16 * 16 <= 0.25)
+	{
+		OutPosition.xy = (SvPosition + CornerOffset * 0.5 - VelocityTile_ScreenPosToViewportBias) / VelocityTile_ScreenPosToViewportScale.xy;
+		OutPosition.z = 0.0002; // zero clips
+		return;
+	}
+
+	float  VelocityLengthPixelsSqr = dot(VelocityPixels, VelocityPixels);
+	float  VelocityLengthPixelsInv = rsqrtFast(VelocityLengthPixelsSqr);
+	float  VelocityLengthPixels = VelocityLengthPixelsSqr * VelocityLengthPixelsInv;
+	float2 VelocityDir = VelocityPixels * VelocityLengthPixelsInv;
+
+	// Project pixel corner on to dir. This is the oriented extent of a pixel.
+	// 1/2 pixel because shape is swept tile
+	// +1/2 pixel for conservative rasterization
+	// 99% to give epsilon before neighbor is filled. Otherwise all neighbors lie on edges of quad when no velocity in their direction.
+	// dot(abs(VelocityDir), float2(1, 1))
+	float Extent = abs(VelocityDir.x) + abs(VelocityDir.y);
+	CornerOffset *= float2(VelocityLengthPixels, 0) + Extent.xx * 0.99;
+
+	// Orient along velocity direction
+	float2 AxisX = VelocityDir;
+	float2 AxisY = float2(-VelocityDir.y, VelocityDir.x);
+	CornerOffset = AxisX * CornerOffset.x + AxisY * CornerOffset.y;
+
+	OutPosition.xy = (SvPosition + CornerOffset - VelocityTile_ScreenPosToViewportBias) / VelocityTile_ScreenPosToViewportScale;
+
+	// Depth ordered by velocity length
+	OutPosition.z = (ScatterPass == VELOCITY_SCATTER_PASS_MAX) ? VelocityLengthPixels : length(MinMaxVelocityPixels.xy);
+	OutPosition.z = clamp(OutPosition.z / VelocityTile_ScreenPosToViewportScale.x * 0.5, 0.0002, 0.999);
+}
+
+void MyPS(
+	nointerpolation float4 InColor : TEXCOORD0,
+    float2 uv: ,
+	out float4 OutColor : SV_Target0)
+{
+    int2 texDim = InputInfo_ViewportMax;
+
+    int2 PixelPos = uv * texDim - float2(0.5, 0.5);
+    PixelPos.x = max(0, PixelPos.x);
+    PixelPos.y = max(0, PixelPos.y);
+
+
+    uint count = 0;
+    OutColor = float4(0.0, 0.0, 0.0, 1.0);
+    for (int i = -1; i <= KERNEL_SIZE/2; i++){
+        for (int j = -1; j <= KERNEL_SIZE/2; j++){
+            int2 newPixelPos = PixelPos + int2(i, j);
+    
+	        BRANCH
+            if (!outside(newPixelPos,texDim)){
+                count += 1;
+                OutColor.xyz += gSceneColor[newPixelPos].xyz;
+
+            }
+        }
+    }
+    OutColor.xyz /= float(count);
+
+}

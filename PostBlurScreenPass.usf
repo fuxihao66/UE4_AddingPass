@@ -1,0 +1,65 @@
+
+
+RWTexture2D<float4> gSceneColor;
+// RWTexture2D<float4> gFilterResult;
+
+#define KERNEL_SIZE 3
+
+
+// cbuffer CB
+// {
+//     uint2 texDim;
+// };
+
+
+SCREEN_PASS_TEXTURE_VIEWPORT(InputInfo)
+
+bool outside(int2 pixelPos, uint2 dim){
+	BRANCH
+    if (pixelPos.x < 0 || pixelPos.y < 0){
+        return true;
+    }
+    
+	BRANCH
+    if (pixelPos.x >= dim.x || pixelPos.y >= dim.y){
+        return true;
+    }
+
+    return false;
+}
+
+
+
+
+void MyPS(
+	in noperspective float4 UVAndScreenPos : TEXCOORD0,
+	in float4 SvPosition : SV_Position,
+	out float4 OutColor : SV_Target0)
+{
+
+    int2 texDim = InputInfo_ViewportMax;
+	float2 uv = UVAndScreenPos.xy;
+
+    int2 PixelPos = uv * texDim - float2(0.5, 0.5);
+    PixelPos.x = max(0, PixelPos.x);
+    PixelPos.y = max(0, PixelPos.y);
+
+
+    uint count = 0;
+    OutColor = float4(0.0, 0.0, 0.0, 1.0);
+    for (int i = -1; i <= KERNEL_SIZE/2; i++){
+        for (int j = -1; j <= KERNEL_SIZE/2; j++){
+            int2 newPixelPos = PixelPos + int2(i, j);
+    
+	        BRANCH
+            if (!outside(newPixelPos,texDim)){
+                count += 1;
+                OutColor.xyz += gSceneColor[newPixelPos].xyz;
+
+            }
+        }
+    }
+    OutColor.xyz /= float(count);
+
+
+}
